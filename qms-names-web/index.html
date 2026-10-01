@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c091a">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Claim your .qms name on QMS Network.">
+<title>QMS Names</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230c091a'/%3E%3Ccircle cx='15' cy='14' r='7' fill='none' stroke='%23a58cff' stroke-width='3'/%3E%3Cpath d='M19.5 19l5 5' stroke='%23a58cff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/" aria-label="QMS Names home">
+    <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><circle cx="15" cy="14" r="7" fill="none" stroke="currentColor" stroke-width="3"/><path d="M19.5 19l5 5" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+    <span>QMS Names</span>
+  </a>
+  <nav class="actions">
+    <a id="mylink" class="link" href="#/my" hidden>My names</a>
+    <button id="connect" class="btn small" type="button">Connect wallet</button>
+  </nav>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<main id="view" aria-live="polite"></main>
+
+<footer class="foot">
+  <span>Testnet. Names have no value and may be reset.</span>
+  <a id="contractlink" href="#" target="_blank" rel="noopener">Contract</a>
+  <a href="https://docs.qms.finance" target="_blank" rel="noopener">QMS docs</a>
+</footer>
+
+<div id="sheetwrap" class="sheetwrap" hidden>
+  <div class="backdrop" data-close></div>
+  <section id="sheet" class="sheet" role="dialog" aria-modal="true"></section>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="vendor/ethers.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
