@@ -252,6 +252,7 @@
     const h = location.hash.slice(1) || "/";
     window.scrollTo(0, 0);
     if (h === "/my") return viewMy();
+    if (h === "/developers") return viewDevelopers();
     const m = h.match(/^\/name\/([a-z0-9-]+)$/);
     if (m) return viewName(m[1]);
     return viewHome();
@@ -292,7 +293,8 @@
             <div class="price-row"><span>3 letters</span><b>${fmtQ(p3)}</b></div>
             <div class="price-row"><span>4 letters</span><b>${fmtQ(p4)}</b></div>
             <div class="price-row"><span>5 or more</span><b>${fmtQ(p5)}</b></div>
-          </div>`;
+          </div>
+          <p class="note" style="margin-top:18px">Building an app? <a href="#/developers">Show .qms names in it</a>.</p>`;
       } catch (_) { $("#result").innerHTML = `<p class="mu">Couldn't reach the network. Check your connection and reload.</p>`; }
     }
 
@@ -633,6 +635,70 @@
     } catch (err) {
       view().innerHTML = `<h1>My names</h1><p class="err">Couldn't load your names. ${esc(niceError(err))}</p>`;
     }
+  }
+
+  /* ------------------------------------------------------------------ developers */
+  const DEV = { npm: "https://www.npmjs.com/package/qms-names", repo: "https://github.com/lario0913/useqmsnames" };
+  const codeBlock = (code) => `<div class="code"><pre><code>${esc(code)}</code></pre><button class="copy" type="button" data-copy="${esc(code)}">Copy</button></div>`;
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-copy]");
+    if (!b) return;
+    try { await navigator.clipboard.writeText(b.dataset.copy); toast("Copied"); } catch (_) { toast("Select the text and copy it", "bad"); }
+  });
+
+  function viewDevelopers() {
+    const example = `import { createQmsNames } from "qms-names";
+
+const qms = createQmsNames();
+
+await qms.resolve("alice.qms");  // "0x…" or null
+await qms.displayName(address);  // "alice.qms", or a short address`;
+    view().innerHTML = `
+      <div class="dev">
+        <a class="back" href="#/">← Names</a>
+        <h1>Add .qms names to your app</h1>
+        <p class="mu">Show alice.qms instead of 0x… in three lines of code.</p>
+        <h2>Install</h2>
+        ${codeBlock("npm install qms-names ethers")}
+        <h2>Use it</h2>
+        ${codeBlock(example)}
+        <h2>Try it live</h2>
+        <p class="mu">Enter a name or an address. This reads QMS Testnet right now.</p>
+        <div class="demo"><input id="dq" type="text" placeholder="larioo.qms or 0x…" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Name or address"><button class="btn" id="dgo" type="button">Look up</button></div>
+        <div class="out" id="dout" aria-live="polite"></div>
+        <h2>Links</h2>
+        <div class="panel">
+          <div class="kv"><span class="k">npm</span><span class="v"><a href="${DEV.npm}" target="_blank" rel="noopener">qms-names</a></span></div>
+          <div class="kv"><span class="k">Source</span><span class="v"><a href="${DEV.repo}" target="_blank" rel="noopener">GitHub</a></span></div>
+          <div class="kv"><span class="k">Contract</span><span class="v"><a class="mono" href="${CFG.explorer}/address/${CFG.contract}" target="_blank" rel="noopener">${short(CFG.contract)}</a></span></div>
+        </div>
+        <h2>Not using ethers?</h2>
+        <p class="mu">Call the contract directly from any library: <span class="mono">nameOf(address)</span> returns an address's primary name, and <span class="mono">resolve(label)</span> returns the address for a name.</p>
+        <div class="panel">
+          <div class="kv"><span class="k">Chain ID</span><span class="v">${CFG.chainId}</span></div>
+          <div class="kv"><span class="k">RPC</span><span class="v mono">${CFG.rpc}</span></div>
+        </div>
+      </div>`;
+    const inp = $("#dq"), out = $("#dout");
+    async function run() {
+      const v = inp.value.trim();
+      if (!v) return;
+      out.innerHTML = `<span class="spin"></span>`;
+      try {
+        if (ethers.isAddress(v)) {
+          const n = await rc.nameOf(v);
+          out.innerHTML = n ? `<span class="mono">${esc(short(ethers.getAddress(v)))}</span> → <b>${esc(n)}</b>` : "No primary name set for this address.";
+        } else {
+          const label = v.toLowerCase().replace(/\.qms$/, "");
+          const bad = checkLabel(label);
+          if (bad) { out.textContent = bad; return; }
+          const a = await rc.resolve(label);
+          out.innerHTML = a === ethers.ZeroAddress ? `<b>${esc(label)}.qms</b> isn't registered, or has expired.` : `<b>${esc(label)}.qms</b> → <span class="mono">${esc(a)}</span>`;
+        }
+      } catch (err) { out.textContent = "Couldn't reach the network. " + niceError(err); }
+    }
+    $("#dgo").onclick = run;
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
   }
 
   /* ------------------------------------------------------------------ boot */
