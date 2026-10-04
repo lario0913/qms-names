@@ -296,7 +296,8 @@
             <div class="price-row"><span>4 letters</span><b>${fmtQ(p4)}</b></div>
             <div class="price-row"><span>5 or more</span><b>${fmtQ(p5)}</b></div>
           </div>
-          <p class="note" style="margin-top:18px"><a href="#/send">Send QMS to a name</a>. Building an app? <a href="#/developers">Show .qms names in it</a>.</p>`;
+          <p class="note" style="margin:18px 0 0"><a href="#/send">Send $QMS to a name</a></p>
+          <p class="note" style="margin:6px 0 0">Building an app? <a href="#/developers">Show .qms names in it</a></p>`;
       } catch (_) { $("#result").innerHTML = `<p class="mu">Couldn't reach the network. Check your connection and reload.</p>`; }
     }
 
