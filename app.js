@@ -253,6 +253,8 @@
     window.scrollTo(0, 0);
     if (h === "/my") return viewMy();
     if (h === "/developers") return viewDevelopers();
+    const sm = h.match(/^\/send(?:\/([a-z0-9-]+))?$/);
+    if (sm) return viewSend(sm[1]);
     const m = h.match(/^\/name\/([a-z0-9-]+)$/);
     if (m) return viewName(m[1]);
     return viewHome();
@@ -294,7 +296,7 @@
             <div class="price-row"><span>4 letters</span><b>${fmtQ(p4)}</b></div>
             <div class="price-row"><span>5 or more</span><b>${fmtQ(p5)}</b></div>
           </div>
-          <p class="note" style="margin-top:18px">Building an app? <a href="#/developers">Show .qms names in it</a>.</p>`;
+          <p class="note" style="margin-top:18px"><a href="#/send">Send QMS to a name</a>. Building an app? <a href="#/developers">Show .qms names in it</a>.</p>`;
       } catch (_) { $("#result").innerHTML = `<p class="mu">Couldn't reach the network. Check your connection and reload.</p>`; }
     }
 
@@ -487,6 +489,7 @@
           ${recs.map(([, n, v]) => `<div class="kv"><span class="k">${esc(n)}</span><span class="v">${linkify(v)}</span></div>`).join("")}
         </div>
         <div class="btnrow" id="acts">
+          <a class="btn ghost" href="#/send/${esc(label)}">Send QMS</a>
           <button class="btn ghost" id="renew">Renew</button>
           ${isOwner ? `
           <button class="btn ghost" id="setaddr">Change address</button>
@@ -635,6 +638,96 @@
     } catch (err) {
       view().innerHTML = `<h1>My names</h1><p class="err">Couldn't load your names. ${esc(niceError(err))}</p>`;
     }
+  }
+
+  /* ------------------------------------------------------------------ send */
+  async function viewSend(prefill) {
+    view().innerHTML = `
+      <a class="back" href="#/">← Names</a>
+      <h1>Send QMS to a name</h1>
+      <p class="mu">Pay alice.qms instead of pasting a long address.</p>
+      <label class="field"><span>To (name or address)</span><input id="sto" type="text" placeholder="alice.qms or 0x…" autocomplete="off" autocapitalize="none" spellcheck="false" value="${esc(prefill ? prefill + ".qms" : "")}"></label>
+      <div class="out" id="sres"></div>
+      <label class="field"><span>Amount (QMS)</span><input id="samt" type="text" inputmode="decimal" placeholder="0.0" autocomplete="off"></label>
+      <p class="note" id="sbal"></p>
+      <button class="btn block" id="sgo" type="button" disabled>Review payment</button>
+      <p class="note" style="margin-top:12px">Testnet. Check the address on the next screen before you confirm.</p>`;
+
+    let target = null, seq = 0, timer;
+    const parseAmt = () => {
+      const s = $("#samt").value.trim();
+      if (!/^\d*\.?\d+$/.test(s)) return null;
+      try { const w = ethers.parseEther(s); return w > 0n ? w : null; } catch (_) { return null; }
+    };
+    const update = () => { $("#sgo").disabled = !(target && parseAmt()); };
+
+    async function resolveTo() {
+      const my = ++seq, v = $("#sto").value.trim(), out = $("#sres");
+      target = null; update();
+      if (!v) { out.textContent = ""; return; }
+      out.innerHTML = `<span class="spin"></span>`;
+      try {
+        if (ethers.isAddress(v)) {
+          const a = ethers.getAddress(v);
+          const n = await rc.nameOf(a).catch(() => "");
+          if (my !== seq) return;
+          target = { address: a, label: n || null, byName: false };
+          out.innerHTML = `<span class="mono">${esc(a)}</span>${n ? ` · <b>${esc(n)}</b>` : ""}`;
+        } else {
+          const label = v.toLowerCase().replace(/\.qms$/, "");
+          const bad = checkLabel(label);
+          if (bad) { out.textContent = bad; return; }
+          const a = await rc.resolve(label);
+          if (my !== seq) return;
+          if (a === ethers.ZeroAddress) { out.innerHTML = `<b>${esc(label)}.qms</b> isn't registered, or has expired.`; return; }
+          target = { address: a, label: label + ".qms", byName: true };
+          out.innerHTML = `<b>${esc(label)}.qms</b> → <span class="mono">${esc(a)}</span>`;
+        }
+      } catch (err) { if (my === seq) out.textContent = "Couldn't look that up. " + niceError(err); }
+      update();
+    }
+
+    $("#sto").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(resolveTo, 350); });
+    $("#samt").addEventListener("input", update);
+    if (prefill) resolveTo();
+    if (state.account) {
+      try { $("#sbal").textContent = "Your balance: " + fmtQ(await ro.getBalance(state.account)); } catch (_) {}
+    } else $("#sbal").textContent = "Connect your wallet to send.";
+
+    $("#sgo").onclick = async () => {
+      if (!(await requireWallet())) return;
+      const amt = parseAmt(), t = target;
+      if (!amt || !t) return;
+      const who = t.label ? `<b>${esc(t.label)}</b><br>` : "";
+      openSheet(`
+        <h2>Confirm payment</h2>
+        <div class="panel">
+          <div class="kv"><span class="k">Send</span><span class="v"><b>${fmtQ(amt)}</b></span></div>
+          <div class="kv"><span class="k">To</span><span class="v">${who}<span class="mono">${esc(t.address)}</span></span></div>
+        </div>
+        <p class="note">The network fee is extra.</p>
+        <p class="err" id="serr" hidden></p>
+        <button class="btn block" id="sconfirm" type="button">Send ${fmtQ(amt)}</button>`);
+      $("#sconfirm").onclick = async () => {
+        const btn = $("#sconfirm"), er = $("#serr");
+        btn.disabled = true; btn.innerHTML = `<span class="spin"></span> Waiting for wallet`; er.hidden = true;
+        try {
+          if (t.byName) { // the owner may have changed where the name points since the lookup
+            const now = await rc.resolve(t.label.replace(/\.qms$/, ""));
+            if (now.toLowerCase() !== t.address.toLowerCase()) throw new Error("This name now points to a different address. Close this and review again.");
+          }
+          const tx = await state.signer.sendTransaction({ to: t.address, value: amt });
+          const rcpt = await tx.wait(1);
+          $("#sheet").innerHTML = `<button class="x" data-close aria-label="Close">×</button>
+            <h2>Sent</h2>
+            <p>${fmtQ(amt)} to <b>${esc(t.label || short(t.address))}</b></p>
+            <p class="mu" id="sconf"><span class="spin"></span> Confirming 1/${CFG.confs}</p>
+            <a class="btn ghost" href="${CFG.explorer}/tx/${tx.hash}" target="_blank" rel="noopener">View transaction</a>`;
+          trackConfs(rcpt.blockNumber, $("#sconf"));
+          try { $("#sbal").textContent = "Your balance: " + fmtQ(await ro.getBalance(state.account)); } catch (_) {}
+        } catch (e) { er.textContent = niceError(e); er.hidden = false; btn.disabled = false; btn.textContent = "Try again"; }
+      };
+    };
   }
 
   /* ------------------------------------------------------------------ developers */
